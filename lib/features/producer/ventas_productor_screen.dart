@@ -1,0 +1,192 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../data/models/venta.dart';
+import '../../providers/venta_provider.dart';
+import '../../utils/formatters.dart';
+import '../common/empty_view.dart';
+import '../common/loading_view.dart';
+import 'widgets/venta_qr_bottom_sheet.dart';
+
+class VentasProductorScreen extends StatefulWidget {
+  const VentasProductorScreen({super.key});
+
+  @override
+  State<VentasProductorScreen> createState() => _VentasProductorScreenState();
+}
+
+class _VentasProductorScreenState extends State<VentasProductorScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Forzar recarga al abrir la pantalla para ver cambios hechos por el admin
+    Future.microtask(() => context.read<VentaProvider>().loadVentasProductor(forceRefresh: true));
+  }
+
+  Future<void> _refresh() async {
+    await context.read<VentaProvider>().loadVentasProductor(refresh: true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Ventas recibidas')),
+      body: Consumer<VentaProvider>(
+        builder: (context, ventasProvider, _) {
+          if (ventasProvider.isLoadingProductor &&
+              ventasProvider.ventasProductor.isEmpty) {
+            return const LoadingView();
+          }
+
+          if (ventasProvider.errorProductor != null &&
+              ventasProvider.ventasProductor.isEmpty) {
+            return EmptyView(message: ventasProvider.errorProductor!);
+          }
+
+          if (ventasProvider.ventasProductor.isEmpty) {
+            return const EmptyView(message: 'Aún no recibiste ventas.');
+          }
+
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView.builder(
+              itemCount: ventasProvider.ventasProductor.length,
+              itemBuilder: (context, index) {
+                final venta = ventasProvider.ventasProductor[index];
+                final statusColor = _statusColor(venta);
+                final statusIcon = _statusIcon(venta);
+                final statusLabel = VentaStatus.label(venta.estado);
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: ExpansionTile(
+                    title: Text(formatMoney(venta.montoTotal)),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Fecha: ${formatDate(venta.fecha)}'),
+                        const SizedBox(height: 4),
+                        if (venta.estaSolicitada)
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              FilledButton(
+                                onPressed: ventasProvider.isLoadingProductor
+                                    ? null
+                                    : () => ventasProvider.aceptarVenta(venta.id),
+                                child: const Text('Aceptar'),
+                              ),
+                              OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.red.shade700,
+                                ),
+                                onPressed: ventasProvider.isLoadingProductor
+                                    ? null
+                                    : () => ventasProvider.denegarVentaProductor(venta.id),
+                                child: const Text('Denegar'),
+                              ),
+                            ],
+                          )
+                        else
+                          Chip(
+                            label: Text(statusLabel, textAlign: TextAlign.start),
+                            avatar: Icon(statusIcon, color: statusColor, size: 18),
+                            backgroundColor: statusColor.withOpacity(0.15),
+                          ),
+                      ],
+                    ),
+                    trailing: null,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              statusLabel,
+                              style: TextStyle(color: statusColor, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Nro. transacción: ${venta.numeroTransaccion.isEmpty ? 'No registrado' : venta.numeroTransaccion}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: Colors.grey.shade700),
+                            ),
+                            if ((venta.telefonoComprobador ?? '').isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  'Teléfono comprobador: ${venta.telefonoComprobador}',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(color: Colors.grey.shade700),
+                                ),
+                              ),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Detalle de productos',
+                                  style: Theme.of(context).textTheme.titleMedium,
+                                ),
+                                if (!venta.estaSolicitada)
+                                  TextButton.icon(
+                                    onPressed: () => _showQr(context, venta),
+                                    icon: const Icon(Icons.qr_code_2),
+                                    label: const Text('Ver QR'),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ...venta.detalles.map(
+                              (detalle) => ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(detalle.nombreProducto),
+                                subtitle: Text(
+                                  '${detalle.cantidad} x ${formatMoney(detalle.precioUnitario)}',
+                                ),
+                                trailing: Text(formatMoney(detalle.subtotal)),
+                              ),
+                            ),
+                            const Divider(),
+                            Text('Total: ${formatMoney(venta.montoTotal)}'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+void _showQr(BuildContext context, VentaModel venta) {
+  showModalBottomSheet(
+    context: context,
+    builder: (_) => VentaQrBottomSheet(venta: venta),
+    showDragHandle: true,
+  );
+}
+
+Color _statusColor(VentaModel venta) {
+  if (venta.estaDenegada) return Colors.red.shade700;
+  if (venta.estaCompletada) return Colors.green.shade700;
+  if (venta.estaAceptadaEnRevision) return Colors.blue.shade700;
+  return Colors.orange.shade700;
+}
+
+IconData _statusIcon(VentaModel venta) {
+  if (venta.estaDenegada) return Icons.report;
+  if (venta.estaCompletada) return Icons.task_alt;
+  if (venta.estaAceptadaEnRevision) return Icons.fact_check;
+  return Icons.schedule;
+}
