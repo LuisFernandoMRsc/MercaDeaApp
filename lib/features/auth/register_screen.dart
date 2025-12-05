@@ -132,7 +132,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   decoration: const InputDecoration(labelText: 'Contraseña'),
                   obscureText: true,
                   validator: (value) =>
-                      value == null || value.length < 4 ? 'Mínimo 4 caracteres' : null,
+                      value == null || value.length < 6 ? 'Mínimo 6 caracteres' : null,
                 ),
                 const SizedBox(height: 24),
                 FilledButton.icon(

@@ -100,8 +100,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       obscureText: true,
                       validator: (value) {
-                        if (value == null || value.length < 4) {
-                          return 'La contraseña debe tener al menos 4 caracteres';
+                        if (value == null || value.length < 6) {
+                          return 'La contraseña debe tener al menos 6 caracteres';
                         }
                         return null;
                       },
